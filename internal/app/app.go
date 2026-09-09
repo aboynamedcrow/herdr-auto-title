@@ -150,6 +150,37 @@ func (a *App) rename(
 	tab state.TabState,
 	decision resolver.Decision,
 ) {
+	// Resolution can outlive a layout's rename. Recheck its label immediately
+	// before writing; the next poll will resolve changed context afresh.
+	snapshot, err := herdr.SessionSnapshot(ctx, client)
+	if err != nil {
+		a.log.Warn("could not recheck tab before rename", "tab_id", tab.ID, "error", err)
+		return
+	}
+
+	found := false
+
+	for _, current := range snapshot.Tabs {
+		if current.TabID != tab.ID {
+			continue
+		}
+
+		found = true
+
+		if current.Label != tab.CurrentName {
+			tab.CurrentName = current.Label
+			a.manual.Observe(state.SightingFrom(tab, decision.Name))
+
+			return
+		}
+
+		break
+	}
+
+	if !found {
+		return
+	}
+
 	if err := herdr.RenameTab(ctx, client, tab.ID, decision.Name); err != nil {
 		if herdr.ErrorCode(err) == herdr.CodeTabNotFound {
 			// The tab closed between the snapshot and the rename. The next

@@ -34,6 +34,18 @@ the plugin.
 `Manual.Applied` records each successful rename, so the plugin's own work never
 reads as the user's on the next poll.
 
+Before a rename, a second snapshot checks that the tab still carries the label
+used for resolution. A layout can name a new tab while process and Git reads
+are in progress. Without this check, Auto Title can overwrite that name and
+record its own replacement, leaving later polls unable to detect the conflict.
+A changed label is observed and preserved; a closed tab or failed snapshot
+receives no rename. This adds one snapshot only when a rename is proposed.
+
+The check and write are separate requests. A rename in the remaining interval
+still requires native conditional-write support to preserve atomically; this
+change does not claim that guarantee. The September 9 Crew-layout race was
+reproduced with a rename between the initial snapshot and resolution.
+
 ## Two traps this design walked into
 
 Both were found by running it, not by reading it.
