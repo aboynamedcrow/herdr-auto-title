@@ -38,7 +38,6 @@ func TestConcurrentLayoutRenameIsPreserved(t *testing.T) {
 		client.SetTab(herdr.TabInfo{TabID: "wE:t1", Label: "Crew"})
 	}}
 	app := New(testConfig(), discardLogger(), testResolver(t))
-	app.manual.Settled()
 
 	for range 2 {
 		if err := app.readAndRename(context.Background(), changed); err != nil {
