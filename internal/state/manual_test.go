@@ -11,8 +11,6 @@ import (
 func newManual(t *testing.T) *Manual {
 	t.Helper()
 	m := LoadManual(filepath.Join(t.TempDir(), "manual-names.json"))
-	// Most tests are about a session already under way.
-	m.Settled()
 
 	return m
 }
@@ -41,20 +39,57 @@ func TestSightingFromDerivesTheDefaultLabel(t *testing.T) {
 	}
 }
 
-func TestTheFirstPollNeverLocks(t *testing.T) {
-	// The trap this rule exists for: on the first poll almost every tab carries
-	// a label that is not yet what the resolver would produce. Locking on that
-	// would claim the whole session the moment the plugin starts.
+func TestTheFirstPollPreservesExplicitNames(t *testing.T) {
 	m := LoadManual("")
+	if m.Observe(sighting("1")) {
+		t.Fatal("default label was locked")
+	}
 
-	for _, s := range []Sighting{
-		{TabID: "wE:t1", Current: "1", Desired: "dashboard", Default: "1"},
-		{TabID: "wE:t2", Current: "Important work", Desired: "api", Default: "2"},
-		{TabID: "wE:t3", Current: "nvim › stale.go", Desired: "nvim › fresh.go", Default: "3"},
-	} {
-		if m.Observe(s) {
-			t.Errorf("tab %s was locked on the first poll", s.TabID)
-		}
+	if !m.Observe(Sighting{TabID: "wE:t2", Current: "Crew · task", Desired: "api", Default: "2"}) {
+		t.Fatal("explicit startup label was not protected")
+	}
+}
+
+func TestAppliedNamesRemainAutomaticAfterRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "manual.json")
+	m := LoadManual(path)
+	m.Applied("wE:t1", "old title")
+	m = LoadManual(path)
+	m.Retain(map[string]string{"wE:t1": "old title"})
+
+	if m.Observe(sighting("old title")) {
+		t.Fatal("the plugin locked its own persisted label")
+	}
+
+	m = LoadManual(path)
+	m.Retain(map[string]string{"wE:t1": "Crew · renamed offline"})
+
+	if !m.Observe(sighting("Crew · renamed offline")) {
+		t.Fatal("an offline explicit rename was overwritten")
+	}
+}
+
+func TestDefaultManualPathsSeparateServers(t *testing.T) {
+	t.Setenv("HERDR_SOCKET_PATH", filepath.Join(t.TempDir(), "one.sock"))
+
+	one := DefaultManualPath()
+
+	t.Setenv("HERDR_SOCKET_PATH", filepath.Join(t.TempDir(), "two.sock"))
+
+	two := DefaultManualPath()
+	if one == two || one == "" || two == "" {
+		t.Fatal("server lock files overlap")
+	}
+
+	first := LoadManual(one)
+	first.Observe(sighting("First crew"))
+
+	second := LoadManual(two)
+	second.Observe(sighting("Second crew"))
+	second.Retain(map[string]string{})
+
+	if !LoadManual(one).Locked("wE:t1") {
+		t.Fatal("the second server removed the first server's lock")
 	}
 }
 

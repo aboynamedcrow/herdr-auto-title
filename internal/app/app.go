@@ -134,10 +134,6 @@ func (a *App) readAndRename(ctx context.Context, client herdr.Client) error {
 		a.rename(ctx, client, tab, decision)
 	}
 
-	// Reached only when every tab was seen. Deferring this would settle after a
-	// poll cut short, and the tabs it missed would look new and already named.
-	a.manual.Settled()
-
 	return nil
 }
 

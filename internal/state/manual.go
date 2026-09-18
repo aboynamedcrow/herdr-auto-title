@@ -1,7 +1,9 @@
 package state
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -15,29 +17,29 @@ import (
 type Manual struct {
 	mu   sync.Mutex
 	path string
-	// settled is false until the first poll has finished, while no tab can yet
-	// be judged.
-	settled bool
 	// seen is the label each tab carried when it was last looked at.
 	seen map[string]string
 	// locked is the label a tab carried when the user claimed it. The label,
 	// not the id, is what makes a reloaded lock safe: Herdr reuses tab ids.
-	locked map[string]string
+	locked  map[string]string
+	applied map[string]string
 }
 
 // manualFile is the on-disk form: locks outlive the process because Herdr can
 // restart a plugin mid-session.
 type manualFile struct {
-	Locked map[string]string `json:"locked_tabs"`
+	Locked  map[string]string `json:"locked_tabs"`
+	Applied map[string]string `json:"applied_tabs,omitempty"`
 }
 
 // LoadManual reads persisted locks from path. Anything unreadable yields an
 // empty set: this is a convenience, not a reason to refuse to start.
 func LoadManual(path string) *Manual {
 	m := &Manual{
-		path:   path,
-		seen:   make(map[string]string),
-		locked: make(map[string]string),
+		path:    path,
+		seen:    make(map[string]string),
+		locked:  make(map[string]string),
+		applied: make(map[string]string),
 	}
 
 	raw, err := os.ReadFile(path)
@@ -51,6 +53,8 @@ func LoadManual(path string) *Manual {
 	}
 
 	maps.Copy(m.locked, stored.Locked)
+	maps.Copy(m.applied, stored.Applied)
+	maps.Copy(m.seen, stored.Applied)
 
 	return m
 }
@@ -62,7 +66,23 @@ func DefaultManualPath() string {
 		return ""
 	}
 
-	return filepath.Join(dir, "herdr-auto-title", "manual-names.json")
+	socket := os.Getenv("HERDR_SOCKET_PATH")
+	if socket == "" {
+		return ""
+	}
+
+	absolute, err := filepath.Abs(socket)
+	if err != nil {
+		return ""
+	}
+
+	if canonical, err := filepath.EvalSymlinks(absolute); err == nil {
+		absolute = canonical
+	}
+
+	name := fmt.Sprintf("manual-names-%x.json", sha256.Sum256([]byte(absolute)))
+
+	return filepath.Join(dir, "herdr-auto-title", name)
 }
 
 // Locked reports whether the user has claimed this tab.
@@ -117,24 +137,12 @@ func (m *Manual) Observe(s Sighting) bool {
 		if s.Current == previous {
 			return false
 		}
-	case !m.settled:
-		// The first poll, where nothing carries a name Auto Title has set.
-		return false
 	}
 
 	m.locked[s.TabID] = s.Current
 	m.saveLocked()
 
 	return true
-}
-
-// Settled marks the end of a poll. Only the first matters: after it, an unseen
-// tab is one that did not exist before.
-func (m *Manual) Settled() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.settled = true
 }
 
 // Applied records a label Auto Title has just set, so the next poll does not
@@ -144,6 +152,8 @@ func (m *Manual) Applied(tabID, label string) {
 	defer m.mu.Unlock()
 
 	m.seen[tabID] = label
+	m.applied[tabID] = label
+	m.saveLocked()
 }
 
 // Retain drops everything about tabs the session no longer holds, and releases
@@ -158,6 +168,15 @@ func (m *Manual) Retain(live map[string]string) {
 	for tabID, label := range m.locked {
 		if current, alive := live[tabID]; !alive || current != label {
 			delete(m.locked, tabID)
+
+			changed = true
+		}
+	}
+
+	for tabID, label := range m.applied {
+		if current, alive := live[tabID]; !alive || current != label {
+			delete(m.applied, tabID)
+			delete(m.seen, tabID)
 
 			changed = true
 		}
@@ -181,18 +200,18 @@ func (m *Manual) saveLocked() {
 		return
 	}
 
-	if os.MkdirAll(filepath.Dir(m.path), 0o755) != nil {
+	if os.MkdirAll(filepath.Dir(m.path), 0o700) != nil {
 		return
 	}
 
 	// encoding/json sorts map keys itself, so the file is diffable already.
-	raw, err := json.MarshalIndent(manualFile{Locked: m.locked}, "", "  ")
+	raw, err := json.MarshalIndent(manualFile{Locked: m.locked, Applied: m.applied}, "", "  ")
 	if err != nil {
 		return
 	}
 
 	tmp := m.path + ".tmp"
-	if os.WriteFile(tmp, raw, 0o644) != nil {
+	if os.WriteFile(tmp, raw, 0o600) != nil {
 		return
 	}
 

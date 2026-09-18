@@ -33,7 +33,7 @@ herdr plugin install kryptamine/herdr-auto-title
 > **server**, and only when it restores a session, so run this once:
 >
 > ```sh
-> herdr server stop   # closes the session; `herdr` brings it back
+> herdr server stop   # closes the session. `herdr` brings it back
 > ```
 >
 > Reopening your terminal will not do: that attaches a new client and leaves
@@ -86,10 +86,10 @@ These rules explain most surprises:
   key that switches to it. It leads the title because the tab bar cuts the tail
   of one too wide for it. `HERDR_AUTO_TITLE_POSITION=false` leaves it out.
 - **A branch shows when it distinguishes.** Your repository's default branch
-  says nothing, so it is left out; anything else is shown, shortened to what
+  says nothing, so it is omitted. Other branches are shortened to text that
   identifies it (`bugfix-asa-cpanel-uapi-mc-13675` → `MC-13675`).
 - **A tab you renamed is yours** and Auto Title never touches it again. Clear
-  its name and it is handed back, on the next poll; renaming it to something
+  its name and it is handed back, on the next poll. Renaming it to something
   else keeps it yours under the new name.
 - Paths, shell prompts, bare program names and your workspace name are left out,
   because they only repeat what the screen already shows.
@@ -98,7 +98,7 @@ These rules explain most surprises:
 
 ## Configuration
 
-Everything is optional; the defaults are what the section above describes.
+Everything is optional. The defaults are what the section above describes.
 Settings live in a file Auto Title reads once, at startup:
 
 | Platform | File                                                        |
@@ -106,7 +106,7 @@ Settings live in a file Auto Title reads once, at startup:
 | macOS    | `~/Library/Application Support/herdr-auto-title/config.env` |
 | Linux    | `~/.config/herdr-auto-title/config.env`                     |
 
-Nothing creates it for you; [`config.env.example`](config.env.example) lists
+Create this file yourself. [`config.env.example`](config.env.example) lists
 every setting commented out. **A change reaches the plugin only when it
 restarts**, with the same `herdr server stop` the install needs.
 
@@ -120,9 +120,9 @@ restarts**, with the same `herdr server stop` the install needs.
 | `HERDR_AUTO_TITLE_DEBUG`       | `false`                                   | Log at DEBUG rather than INFO                                              |
 | `HERDR_AUTO_TITLE_POLL_MS`     | `500`                                     | How often the session is read, in milliseconds                             |
 | `HERDR_AUTO_TITLE_MAX_LENGTH`  | `50`                                      | Longest title, in columns of the tab bar                                   |
-| `HERDR_AUTO_TITLE_BRANCH_MAX`  | `12`                                      | Longest branch a title may carry, in columns; `0` leaves branches out      |
+| `HERDR_AUTO_TITLE_BRANCH_MAX`  | `12`                                      | Longest branch a title may carry, in columns. `0` omits branches      |
 | `HERDR_AUTO_TITLE_POSITION`    | `true`                                    | Put each tab's position in front of its title                              |
-| `HERDR_AUTO_TITLE_MANUAL_FILE` | `manual-names.json`, next to `config.env` | Where tabs you renamed by hand are remembered; empty keeps them in memory  |
+| `HERDR_AUTO_TITLE_MANUAL_FILE` | `manual-names-<socket-hash>.json`, next to `config.env` | Per-server tab ownership. An empty value keeps state in memory  |
 | `HERDR_AUTO_TITLE_TRANSCRIPT`  | `true`                                    | Read an agent's own session transcript when it has not titled its terminal |
 
 ## Documentation
